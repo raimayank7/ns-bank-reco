@@ -111,7 +111,7 @@
         M.onlyBook.map(function (x) { return '<tr><td>' + NS.fmtDate(x.date) + '</td><td>' + esc(bookName(x, 1)) + (x.ref ? ' (' + esc(x.ref) + ')' : '') + '</td><td class="n">' + (x.inn ? money(x.inn, false) : '') + '</td><td class="n">' + (x.out ? money(x.out, false) : '') + '</td></tr>'; }).join('') + '</tbody></table>' : '') +
       (M.onlyBank.length ? '<h4>In the bank statement, not in the books</h4><table class="tbl"><thead><tr><th>Date</th><th>Details</th><th class="n">Withdrawal</th><th class="n">Deposit</th></tr></thead><tbody>' +
         M.onlyBank.map(function (l) { return '<tr><td>' + NS.fmtDate(l.date) + '</td><td>' + esc(l.desc) + (l.ref ? ' (' + esc(l.ref) + ')' : '') + '</td><td class="n">' + (l.dr ? money(l.dr, false) : '') + '</td><td class="n">' + (l.cr ? money(l.cr, false) : '') + '</td></tr>'; }).join('') + '</tbody></table>' : '') +
-      '<div class="st-ft">Made with Nivesh Sahayak Bank Reconciliation (bank-reco.niveshsahayak.in) on ' + NS.fmtDate(NS.today()) + '</div></div>';
+      NS.creditLine('st-ft') + '</div>';
   }
 
   /* ---------- saved reconciliations ---------- */
