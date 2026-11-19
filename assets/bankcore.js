@@ -1,7 +1,8 @@
 /* NSBank: bank reconciliation for bank-reco.niveshsahayak.in. Pure functions, no screen.
    statement(rows): a bank statement read from CSV or Excel (rows = arrays of cells) -> { map, lines: [{ i, date, desc, ref, dr, cr, bal }] }
      dr = withdrawal (money out of the bank), cr = deposit (money in); dates come back as yyyy-mm-dd, day first as Indian banks print them.
-   bookLines(docs, biz, from, to): the business's bank side from the saved records (NSBooks): every line posted to 'bank' in the period
+   bookLines(docs, biz, from, to, acct): the business's bank side from the saved records (NSBooks): every line posted to the bank account
+     acct ('bank' = the default bank, or 'bank:<name>' when the business has several banks) in the period
      (a cleared cheque on the day it cleared) plus cheques deposited or issued and not cleared yet, whatever their date.
    match(lines, book, opts): pairs a statement line with a book line of the same amount and direction; same cheque or reference
      number first, then the nearest date within opts.days (default 10). opts.keep = [[lineIndex, bookId]] pairs made by hand, opts.no = pairs the user undid.
@@ -123,15 +124,17 @@
   function refs(s) { return (String(s || '').match(/\d{5,12}/g) || []).map(function (x) { return x.replace(/^0+/, ''); }); }
 
   /* the bank side of the books */
-  function bookLines(docs, biz, from, to) {
+  function bookLines(docs, biz, from, to, acct) {
     var B = G.NSBooks || (typeof NSBooks !== 'undefined' ? NSBooks : null), out = [];
-    B.book(docs, biz, 'bank', from, to).rows.forEach(function (r) {
+    acct = B.isBank && B.isBank(acct) ? acct : 'bank';
+    B.book(docs, biz, acct, from, to).rows.forEach(function (r) {
       var d = r.d;
       out.push({ id: d.id, date: r.date, inn: r.dr, out: r.cr, d: d, chq: d.chq && d.mode === 'cheque' ? d.chq.no || d.ref || '' : '', ref: d.ref || '' });
     });
     /* cheques sent to the bank but not cleared, and cheques we gave that the payee has not cashed yet */
     B.inBooks(docs, biz).forEach(function (d) {
       if (d.mode !== 'cheque' || !d.chq || (d.chq.st !== 'dep' && d.chq.st !== 'iss') || to && d.date > to) return;
+      if (B.bankOf && B.bankOf(d) !== acct) return;   /* a cheque paid into / drawn on another of the business's banks */
       var a = d.chq.st === 'dep' ? 'chq-in' : 'chq-out', dr = 0, cr = 0;
       B.postings(d).forEach(function (l) { if (l.a === a) { dr += l.dr; cr += l.cr; } });
       if (dr || cr) out.push({ id: d.id, date: d.date, inn: r2(dr), out: r2(cr), d: d, pending: d.chq.st, chq: d.chq.no || d.ref || '', ref: d.ref || '' });
@@ -141,9 +144,10 @@
 
   /* balance as per books on a date, the way a cash book's bank column shows it: the bank account, plus cheques deposited
      and not cleared yet, less cheques issued and not cashed yet */
-  function bookBalance(docs, biz, to) {
-    var B = G.NSBooks || (typeof NSBooks !== 'undefined' ? NSBooks : null), bal = B.book(docs, biz, 'bank', null, to).close;
-    bookLines(docs, biz, to, to).forEach(function (b) { if (b.pending) bal += b.inn - b.out; });
+  function bookBalance(docs, biz, to, acct) {
+    var B = G.NSBooks || (typeof NSBooks !== 'undefined' ? NSBooks : null); acct = B.isBank && B.isBank(acct) ? acct : 'bank';
+    var bal = B.book(docs, biz, acct, null, to).close;
+    bookLines(docs, biz, to, to, acct).forEach(function (b) { if (b.pending) bal += b.inn - b.out; });
     return r2(bal);
   }
 

@@ -8,7 +8,8 @@
   var $ = NS.$, $$ = NS.$$, esc = NS.esc, num = NS.num, r2 = NS.r2, money = NS.money, K = NSBank, t = NSB.t, key = NSB.key;
   var LIB = { xl: ['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw'] };
   var COLS = ['date', 'desc', 'ref', 'dr', 'cr', 'amt', 'type', 'bal'];
-  var cur = 'home', ST = null, keep = [], undo = [], saveId = '', tol = 10;
+  var cur = 'home', ST = null, keep = [], undo = [], saveId = '', tol = 10, acct = 'bank';   /* acct: which of the business's banks (several banks) */
+  function bankAcct() { var L = NSB.banks ? NSB.banks() : []; if (!L.some(function (x) { return x.k === acct; })) acct = 'bank'; return acct; }
   /* ST = { name, rows, map, header, lines, from, to, bank } (rows kept so the columns can be changed) */
 
   function route() { cur = location.hash.slice(1) === 'saved' ? 'saved' : 'home'; show(true); }
@@ -29,9 +30,14 @@
   /* ---------- the work ---------- */
   function lines() { return (ST && ST.lines || []).filter(function (l) { return (!ST.from || l.date >= ST.from) && (!ST.to || l.date <= ST.to); }); }
   function calc() {
-    var L = lines(), book = K.bookLines(D(), NSB.bizName(), ST.from, ST.to), M = K.match(L, book, { days: tol, keep: keep, no: undo });
-    var R = K.brs(K.bookBalance(D(), NSB.bizName(), ST.to), M, ST.bank);
+    var L = lines(), book = K.bookLines(D(), NSB.bizName(), ST.from, ST.to, bankAcct()), M = K.match(L, book, { days: tol, keep: keep, no: undo });
+    var R = K.brs(K.bookBalance(D(), NSB.bizName(), ST.to, bankAcct()), M, ST.bank);
     return { L: L, book: book, M: M, R: R };
+  }
+  /* several banks: which bank this statement is from */
+  function bankPick() {
+    var L = NSB.banks ? NSB.banks() : []; if (L.length < 2) return '';
+    return '<div class="f"><label for="br-acct">' + esc(t('app.bankacct')) + '</label><select id="br-acct">' + L.map(function (x) { return '<option value="' + esc(x.k) + '"' + (x.k === bankAcct() ? ' selected' : '') + '>' + esc(x.name + (x.acc ? ' · …' + String(x.acc).slice(-4) : '')) + '</option>'; }).join('') + '</select></div>';
   }
   function lastBal(L) { for (var i = L.length - 1; i >= 0; i--) if (L[i].bal != null) return L[i].bal; return null; }
 
@@ -50,7 +56,7 @@
     var setup = '<div class="sb-period"><div class="f"><label for="br-from">' + esc(t('sb.from')) + '</label><input type="date" id="br-from" value="' + esc(ST.from) + '"></div>' +
       '<div class="f"><label for="br-to">' + esc(t('sb.to')) + '</label><input type="date" id="br-to" value="' + esc(ST.to) + '"></div>' +
       '<div class="f"><label for="br-bal">' + esc(t('br.bankbal', { d: NS.fmtDate(ST.to) })) + '</label><input id="br-bal" inputmode="decimal" value="' + esc(ST.bank == null ? '' : ST.bank) + '"></div>' +
-      '<div class="f"><label for="br-tol">' + esc(t('br.tol')) + '</label><input id="br-tol" type="number" min="0" max="60" value="' + tol + '"></div></div>';
+      '<div class="f"><label for="br-tol">' + esc(t('br.tol')) + '</label><input id="br-tol" type="number" min="0" max="60" value="' + tol + '"></div>' + bankPick() + '</div>';
     var diffOk = R.diff != null && Math.abs(R.diff) < 0.005;
     var tiles = '<div class="tiles"><div class="tile"><span>' + esc(t('br.matched')) + '</span><b>' + nPairs + '</b></div>' +
       '<a class="tile' + (M.onlyBank.length ? ' warn' : '') + '" href="#br-bank"><span>' + esc(t('br.onlybank')) + '</span><b>' + M.onlyBank.length + '</b></a>' +
@@ -119,7 +125,7 @@
     var list = D().filter(function (d) { return d.type === 'brs'; }).sort(function (a, b) { return (b.to || '').localeCompare(a.to || ''); });
     return '<div class="pane-hd"><h2>' + esc(t('br.saved')) + '</h2></div>' + (list.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>' + esc(t('br.asof')) + '</th><th class="l">' + esc(t('br.file')) + '</th><th class="n">' + esc(t('br.r_bank')) + '</th><th class="n">' + esc(t('br.diff')) + '</th><th></th></tr></thead><tbody>' +
       list.map(function (d) {
-        return '<tr><td>' + NS.fmtDate(d.to) + '</td><td class="l">' + esc(d.file || t('br.typed')) + ' · ' + esc(t('br.nl', { n: (d.lines || []).length })) + '</td><td class="n">' + (d.bank == null ? '—' : money(d.bank, false)) + '</td><td class="n">' + (d.diff == null ? '—' : money(d.diff, false)) + '</td>' +
+        return '<tr><td>' + NS.fmtDate(d.to) + '</td><td class="l">' + esc(d.file || t('br.typed')) + ' · ' + esc(t('br.nl', { n: (d.lines || []).length })) + (NSB.banks && NSB.banks().length > 1 ? ' · ' + esc(NSBooks.bankName(d.bacct || 'bank')) : '') + '</td><td class="n">' + (d.bank == null ? '—' : money(d.bank, false)) + '</td><td class="n">' + (d.diff == null ? '—' : money(d.diff, false)) + '</td>' +
           '<td><button type="button" class="btn sm" data-open="' + esc(d.id) + '">' + esc(t('br.reopen')) + '</button> <button type="button" class="btn sm danger" data-del="' + esc(d.id) + '">' + esc(t('sb.del')) + '</button></td></tr>';
       }).join('') + '</tbody></table></div>' : '<div class="card"><p>' + esc(t('br.nosaved')) + '</p></div>');
   }
@@ -178,7 +184,7 @@
       '<div class="btns"><button class="btn primary">' + esc(t('sb.save')) + '</button><button type="button" class="btn" onclick="this.closest(\'dialog\').close()">' + esc(t('sb.cancel')) + '</button></div>');
     f.onsubmit = function (e) {
       e.preventDefault();
-      NSStore.put('doc', { type: 'exp', app: 1, date: l.date, seller: NSB.sellerCopy(), cat: $('#f-cat', f).value.trim() || t('br.e_chg'), amount: l.dr, mode: 'bank', buyer: { name: '' }, no: l.ref || '', gst: '', itc: false, inter: false, notes: l.desc, total: l.dr }).then(done);
+      NSStore.put('doc', { type: 'exp', app: 1, date: l.date, seller: NSB.sellerCopy(), cat: $('#f-cat', f).value.trim() || t('br.e_chg'), amount: l.dr, mode: 'bank', buyer: { name: '' }, no: l.ref || '', gst: '', itc: false, inter: false, notes: l.desc, total: l.dr, bacct: bankAcct() === 'bank' ? undefined : bankAcct() }).then(done);
     };
   }
   function inForm(l) {
@@ -191,7 +197,7 @@
       var party = $('#f-party', f).value.trim(); if (!party) return;
       NSStore.put('doc', { type: 'receipt', no: nextNo('receipt', 'RCT', l.date), paper: 'a4', design: 'classic', copies: 1, copyLabel: '', gstAdv: false, rate: '18', pos: '', sac: '', rv: '', rvDate: '', refDate: '', bank: '', balance: '', status: '',
         app: 1, kind: 'pay', date: l.date, seller: NSB.sellerCopy(), amount: l.cr, tds: '', mode: 'bank', ref: l.ref || K.refs(l.desc)[0] || '', against: '', purpose: l.desc, alloc: [],
-        buyer: { name: party, addr: '', phone: '', gstin: '', pan: '' }, total: l.cr }).then(done);
+        buyer: { name: party, addr: '', phone: '', gstin: '', pan: '' }, total: l.cr, bacct: bankAcct() === 'bank' ? undefined : bankAcct() }).then(done);
     };
   }
   function clearCheques() {
@@ -209,7 +215,7 @@
 
   function save() {
     var C = calc(), R = C.R, rec = saveId && byId(saveId) || { type: 'brs', app: 1 };
-    Object.assign(rec, { seller: NSB.sellerCopy(), date: ST.to, from: ST.from, to: ST.to, file: ST.name || '', bank: R.bank, book: R.book, diff: R.diff, tol: tol,
+    Object.assign(rec, { seller: NSB.sellerCopy(), date: ST.to, from: ST.from, to: ST.to, file: ST.name || '', bank: R.bank, bacct: bankAcct(), book: R.book, diff: R.diff, tol: tol,
       lines: ST.lines.map(function (l) { return [l.date, l.desc, l.ref, l.dr, l.cr, l.bal]; }), keep: keep, undo: undo,
       pairs: Object.keys(C.M.pairs).map(function (i) { return [+i, C.M.pairs[i]]; }) });
     NSStore.put('doc', rec).then(function (s) { saveId = s && s.id || rec.id; NS.toast(t('sb.saved')); show(); });
@@ -217,7 +223,7 @@
   function reopen(d) {
     ST = { name: d.file || '', rows: null, map: {}, header: -1, from: d.from, to: d.to, bank: d.bank,
       lines: (d.lines || []).map(function (a, i) { return { i: i, date: a[0], desc: a[1], ref: a[2], dr: a[3], cr: a[4], bal: a[5] }; }) };
-    keep = d.keep || []; undo = d.undo || []; tol = d.tol == null ? 10 : d.tol; saveId = d.id;
+    keep = d.keep || []; undo = d.undo || []; tol = d.tol == null ? 10 : d.tol; saveId = d.id; acct = d.bacct || 'bank';
     location.hash = ''; route();
   }
 
@@ -230,6 +236,7 @@
     val('#br-from', function (v) { ST.from = v; }); val('#br-to', function (v) { ST.to = v; });
     val('#br-bal', function (v) { ST.bank = v.trim() === '' ? null : r2(num(v)); });
     val('#br-tol', function (v) { tol = Math.max(0, Math.min(60, parseInt(v, 10) || 0)); });
+    val('#br-acct', function (v) { acct = v; keep = []; undo = []; });
     $$('[data-col]', pane).forEach(function (s) { s.addEventListener('change', function () {
       var m = Object.assign({}, ST.map); m[s.getAttribute('data-col')] = s.value === '' ? null : +s.value; setRows(ST.rows, ST.name, m);
     }); });
@@ -245,11 +252,11 @@
     }); });
     var cc = $('[data-clearchq]', pane); if (cc) cc.addEventListener('click', clearCheques);
     var sv = $('[data-save]', pane); if (sv) sv.addEventListener('click', save);
-    var rs = $('[data-reset]', pane); if (rs) rs.addEventListener('click', function () { if (confirm(t('br.resetc'))) { ST = null; keep = []; undo = []; saveId = ''; show(); } });
+    var rs = $('[data-reset]', pane); if (rs) rs.addEventListener('click', function () { if (NS.okSync(t('br.resetc'))) { ST = null; keep = []; undo = []; saveId = ''; show(); } });
     $$('[data-open]', pane).forEach(function (b) { b.addEventListener('click', function () { var d = byId(b.getAttribute('data-open')); if (d) reopen(d); }); });
     $$('[data-del]', pane).forEach(function (b) { b.addEventListener('click', function () {
       var d = byId(b.getAttribute('data-del'));
-      if (d && confirm(t('sb.cdel', { x: t('br.one') + ' ' + NS.fmtDate(d.to) }))) NSStore.del('doc', d.id).then(function () { if (saveId === d.id) saveId = ''; NS.toast(t('sb.deleted')); show(); });
+      if (d && NS.okSync(t('sb.cdel', { x: t('br.one') + ' ' + NS.fmtDate(d.to) }))) NSStore.del('doc', d.id).then(function () { if (saveId === d.id) saveId = ''; NS.toast(t('sb.deleted')); show(); });
     }); });
     var pr = $('[data-print]', pane), pdf = $('[data-pdf]', pane), cv = $('[data-csv]', pane);
     if (pr) pr.addEventListener('click', NSB.printSheet);
