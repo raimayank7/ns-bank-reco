@@ -6,7 +6,7 @@
 (function () {
   'use strict';
   var $ = NS.$, $$ = NS.$$, esc = NS.esc, num = NS.num, r2 = NS.r2, money = NS.money, K = NSBank, t = NSB.t, key = NSB.key;
-  var LIB = { xl: ['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw'] };
+  var LIB = { xl: ['/assets/vendor/xlsx-0.20.3.full.min.js', ''] };
   var COLS = ['date', 'desc', 'ref', 'dr', 'cr', 'amt', 'type', 'bal'];
   var cur = 'home', ST = null, keep = [], undo = [], saveId = '', tol = 10, acct = 'bank';   /* acct: which of the business's banks (several banks) */
   function bankAcct() { var L = NSB.banks ? NSB.banks() : []; if (!L.some(function (x) { return x.k === acct; })) acct = 'bank'; return acct; }
